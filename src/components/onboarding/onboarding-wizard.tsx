@@ -13,6 +13,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import {
+  SHORT_TERM_GOALS,
+  LONG_TERM_GOALS,
+  INVESTMENT_TIMELINES,
+  type ShortTermGoal,
+  type LongTermGoal,
+  type IncomePreference,
+  type InvestmentTimeline,
+} from '@/types/goals';
 
 type OnboardingStep =
   | 'welcome'
@@ -20,6 +29,7 @@ type OnboardingStep =
   | 'identity'
   | 'banking'
   | 'documents'
+  | 'goals'
   | 'complete';
 
 const STEPS: { id: OnboardingStep; title: string; description: string }[] = [
@@ -28,11 +38,27 @@ const STEPS: { id: OnboardingStep; title: string; description: string }[] = [
   { id: 'identity', title: 'Identity', description: 'KYC verification' },
   { id: 'banking', title: 'Banking', description: 'Connect account' },
   { id: 'documents', title: 'Documents', description: 'Sign agreements' },
+  { id: 'goals', title: 'Goals', description: 'Your objectives' },
   { id: 'complete', title: 'Complete', description: 'Start investing' },
 ];
 
+export interface InvestorGoalsData {
+  shortTermGoals: ShortTermGoal[];
+  longTermGoals: LongTermGoal[];
+  incomePreference: IncomePreference;
+  timeline: InvestmentTimeline;
+  initialInvestment: number;
+}
+
 export function OnboardingWizard() {
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('welcome');
+  const [goalsData, setGoalsData] = useState<InvestorGoalsData>({
+    shortTermGoals: [],
+    longTermGoals: [],
+    incomePreference: 'balanced',
+    timeline: '1_year',
+    initialInvestment: 100000,
+  });
 
   const currentIndex = STEPS.findIndex((s) => s.id === currentStep);
   const progress = ((currentIndex + 1) / STEPS.length) * 100;
@@ -104,7 +130,15 @@ export function OnboardingWizard() {
           {currentStep === 'identity' && <IdentityStep onNext={goNext} onBack={goBack} />}
           {currentStep === 'banking' && <BankingStep onNext={goNext} onBack={goBack} />}
           {currentStep === 'documents' && <DocumentsStep onNext={goNext} onBack={goBack} />}
-          {currentStep === 'complete' && <CompleteStep />}
+          {currentStep === 'goals' && (
+            <GoalsStep
+              onNext={goNext}
+              onBack={goBack}
+              goalsData={goalsData}
+              setGoalsData={setGoalsData}
+            />
+          )}
+          {currentStep === 'complete' && <CompleteStep goalsData={goalsData} />}
         </div>
       </main>
     </div>
@@ -464,7 +498,7 @@ function DocumentsStep({ onNext, onBack }: StepProps) {
             Back
           </Button>
           <Button onClick={onNext} disabled={!allSigned} className="flex-1">
-            Complete Setup
+            Continue
           </Button>
         </div>
       </CardContent>
@@ -472,7 +506,301 @@ function DocumentsStep({ onNext, onBack }: StepProps) {
   );
 }
 
-function CompleteStep() {
+interface GoalsStepProps extends StepProps {
+  goalsData: InvestorGoalsData;
+  setGoalsData: (data: InvestorGoalsData) => void;
+}
+
+function GoalsStep({ onNext, onBack, goalsData, setGoalsData }: GoalsStepProps) {
+  const [subStep, setSubStep] = useState<'short' | 'long' | 'preferences'>('short');
+
+  const toggleShortTermGoal = (goalId: ShortTermGoal) => {
+    const current = goalsData.shortTermGoals;
+    const updated = current.includes(goalId)
+      ? current.filter((g) => g !== goalId)
+      : [...current, goalId];
+    setGoalsData({ ...goalsData, shortTermGoals: updated });
+  };
+
+  const toggleLongTermGoal = (goalId: LongTermGoal) => {
+    const current = goalsData.longTermGoals;
+    const updated = current.includes(goalId)
+      ? current.filter((g) => g !== goalId)
+      : [...current, goalId];
+    setGoalsData({ ...goalsData, longTermGoals: updated });
+  };
+
+  const canProceed =
+    subStep === 'short'
+      ? goalsData.shortTermGoals.length > 0
+      : subStep === 'long'
+      ? goalsData.longTermGoals.length > 0
+      : true;
+
+  const handleNext = () => {
+    if (subStep === 'short') {
+      setSubStep('long');
+    } else if (subStep === 'long') {
+      setSubStep('preferences');
+    } else {
+      onNext();
+    }
+  };
+
+  const handleBack = () => {
+    if (subStep === 'long') {
+      setSubStep('short');
+    } else if (subStep === 'preferences') {
+      setSubStep('long');
+    } else {
+      onBack?.();
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2 mb-2">
+          {['short', 'long', 'preferences'].map((step, i) => (
+            <div
+              key={step}
+              className={`h-1.5 flex-1 rounded-full transition-colors ${
+                (subStep === 'short' && i === 0) ||
+                (subStep === 'long' && i <= 1) ||
+                (subStep === 'preferences' && i <= 2)
+                  ? 'bg-primary'
+                  : 'bg-muted'
+              }`}
+            />
+          ))}
+        </div>
+        <CardTitle>
+          {subStep === 'short' && 'Short-Term Goals'}
+          {subStep === 'long' && 'Long-Term Goals'}
+          {subStep === 'preferences' && 'Investment Preferences'}
+        </CardTitle>
+        <CardDescription>
+          {subStep === 'short' &&
+            'What are you looking to achieve in the next 0-2 years? Select all that apply.'}
+          {subStep === 'long' &&
+            'What are your longer-term objectives (2+ years)? Select all that apply.'}
+          {subStep === 'preferences' &&
+            'How would you like to manage your investment returns?'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {subStep === 'short' && (
+          <div className="space-y-3">
+            {SHORT_TERM_GOALS.map((goal) => {
+              const isSelected = goalsData.shortTermGoals.includes(goal.id);
+              return (
+                <button
+                  key={goal.id}
+                  onClick={() => toggleShortTermGoal(goal.id)}
+                  className={`w-full text-left rounded-lg border p-4 transition-all ${
+                    isSelected
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 transition-colors ${
+                        isSelected ? 'border-primary bg-primary' : 'border-muted-foreground'
+                      }`}
+                    >
+                      {isSelected && <CheckIcon className="w-3 h-3 text-primary-foreground" />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{goal.label}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {goal.suggestedTerm}mo suggested
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">{goal.description}</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {subStep === 'long' && (
+          <div className="space-y-3">
+            {LONG_TERM_GOALS.map((goal) => {
+              const isSelected = goalsData.longTermGoals.includes(goal.id);
+              return (
+                <button
+                  key={goal.id}
+                  onClick={() => toggleLongTermGoal(goal.id)}
+                  className={`w-full text-left rounded-lg border p-4 transition-all ${
+                    isSelected
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 transition-colors ${
+                        isSelected ? 'border-primary bg-primary' : 'border-muted-foreground'
+                      }`}
+                    >
+                      {isSelected && <CheckIcon className="w-3 h-3 text-primary-foreground" />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{goal.label}</span>
+                        <Badge
+                          variant="secondary"
+                          className={`text-xs ${
+                            goal.suggestedStrategy === 'reinvest'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                              : goal.suggestedStrategy === 'withdraw'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                              : ''
+                          }`}
+                        >
+                          {goal.suggestedStrategy === 'reinvest' && 'Compound'}
+                          {goal.suggestedStrategy === 'withdraw' && 'Withdraw'}
+                          {goal.suggestedStrategy === 'hybrid' && 'Flexible'}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">{goal.description}</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {subStep === 'preferences' && (
+          <div className="space-y-6">
+            {/* Income Preference */}
+            <div className="space-y-3">
+              <Label className="text-base">What would you like to do with your monthly interest?</Label>
+              <div className="space-y-2">
+                {[
+                  {
+                    id: 'maximize_monthly' as IncomePreference,
+                    label: 'Receive Monthly Payments',
+                    description: 'Get paid every month via ACH deposit',
+                    icon: '💵',
+                  },
+                  {
+                    id: 'compound_growth' as IncomePreference,
+                    label: 'Compound Growth',
+                    description: 'Reinvest returns for maximum long-term growth',
+                    icon: '📈',
+                  },
+                  {
+                    id: 'balanced' as IncomePreference,
+                    label: 'Balanced Approach',
+                    description: 'Receive some payments, reinvest the rest',
+                    icon: '⚖️',
+                  },
+                ].map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={() => setGoalsData({ ...goalsData, incomePreference: option.id })}
+                    className={`w-full text-left rounded-lg border p-4 transition-all ${
+                      goalsData.incomePreference === option.id
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{option.icon}</span>
+                      <div>
+                        <div className="font-medium">{option.label}</div>
+                        <p className="text-sm text-muted-foreground">{option.description}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Investment Timeline */}
+            <div className="space-y-3">
+              <Label className="text-base">How long do you plan to invest with us?</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {INVESTMENT_TIMELINES.map((timeline) => (
+                  <button
+                    key={timeline.id}
+                    onClick={() => setGoalsData({ ...goalsData, timeline: timeline.id })}
+                    className={`rounded-lg border p-3 text-center transition-all ${
+                      goalsData.timeline === timeline.id
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="font-medium text-sm">{timeline.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Initial Investment */}
+            <div className="space-y-3">
+              <Label className="text-base">Planned initial investment</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {[100000, 250000, 500000, 1000000].map((amount) => (
+                  <button
+                    key={amount}
+                    onClick={() => setGoalsData({ ...goalsData, initialInvestment: amount })}
+                    className={`rounded-lg border p-3 text-center transition-all ${
+                      goalsData.initialInvestment === amount
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="font-medium text-sm">
+                      ${amount >= 1000000 ? `${amount / 1000000}M` : `${amount / 1000}K`}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-4">
+          <Button variant="outline" onClick={handleBack} className="flex-1">
+            Back
+          </Button>
+          <Button onClick={handleNext} disabled={!canProceed} className="flex-1">
+            {subStep === 'preferences' ? 'Complete Setup' : 'Continue'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CompleteStep({ goalsData }: { goalsData: InvestorGoalsData }) {
+  // Determine dashboard focus based on goals
+  const isIncomeFocused =
+    goalsData.incomePreference === 'maximize_monthly' ||
+    goalsData.shortTermGoals.includes('monthly_income');
+  const isGrowthFocused =
+    goalsData.incomePreference === 'compound_growth' ||
+    goalsData.longTermGoals.includes('wealth_building');
+
+  const dashboardPreview = isIncomeFocused
+    ? 'Income-focused dashboard with payment calendar and monthly earnings'
+    : isGrowthFocused
+    ? 'Growth-focused dashboard with projections and compounding charts'
+    : 'Balanced dashboard with income tracking and growth projections';
+
+  const suggestedTerm = goalsData.shortTermGoals.some(
+    (g) => SHORT_TERM_GOALS.find((stg) => stg.id === g)?.suggestedTerm === 12
+  )
+    ? '12-month'
+    : '6-month';
+
   return (
     <Card>
       <CardHeader className="text-center">
@@ -481,10 +809,69 @@ function CompleteStep() {
         </div>
         <CardTitle className="text-2xl">You&apos;re All Set!</CardTitle>
         <CardDescription className="text-base">
-          Your account is ready. You can now make your first investment.
+          Your account is configured based on your investment goals.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Goals Summary */}
+        <div className="rounded-lg border p-4 space-y-4 bg-muted/30">
+          <h3 className="font-medium flex items-center gap-2">
+            <TargetIcon className="w-4 h-4" />
+            Your Investment Profile
+          </h3>
+          <div className="grid gap-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Dashboard Style</span>
+              <span className="font-medium">
+                {isIncomeFocused ? 'Income Focused' : isGrowthFocused ? 'Growth Focused' : 'Balanced'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Suggested Note Term</span>
+              <span className="font-medium">{suggestedTerm}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Investment Horizon</span>
+              <span className="font-medium">
+                {INVESTMENT_TIMELINES.find((t) => t.id === goalsData.timeline)?.label}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Initial Investment</span>
+              <span className="font-medium">
+                ${goalsData.initialInvestment.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Dashboard Preview */}
+        <div className="rounded-lg border p-4 space-y-2">
+          <h3 className="font-medium text-sm">Your Personalized Dashboard</h3>
+          <p className="text-sm text-muted-foreground">{dashboardPreview}</p>
+          <div className="flex gap-2 mt-3">
+            {isIncomeFocused && (
+              <>
+                <Badge variant="secondary">Payment Calendar</Badge>
+                <Badge variant="secondary">Monthly Earnings</Badge>
+              </>
+            )}
+            {isGrowthFocused && (
+              <>
+                <Badge variant="secondary">Growth Projections</Badge>
+                <Badge variant="secondary">Compound Chart</Badge>
+              </>
+            )}
+            {!isIncomeFocused && !isGrowthFocused && (
+              <>
+                <Badge variant="secondary">Portfolio Overview</Badge>
+                <Badge variant="secondary">Goal Progress</Badge>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Next Steps */}
         <div className="rounded-lg border p-4 space-y-4">
           <h3 className="font-medium">Next Steps</h3>
           <ul className="space-y-3 text-sm">
@@ -494,7 +881,9 @@ function CompleteStep() {
               </span>
               <div>
                 <div className="font-medium">Choose Your Note</div>
-                <div className="text-muted-foreground">Select a 6-month or 12-month term</div>
+                <div className="text-muted-foreground">
+                  Based on your goals, we suggest a {suggestedTerm} note
+                </div>
               </div>
             </li>
             <li className="flex items-start gap-3">
@@ -503,7 +892,9 @@ function CompleteStep() {
               </span>
               <div>
                 <div className="font-medium">Fund Your Investment</div>
-                <div className="text-muted-foreground">Wire or ACH transfer ($100K minimum)</div>
+                <div className="text-muted-foreground">
+                  Wire or ACH ${goalsData.initialInvestment.toLocaleString()}
+                </div>
               </div>
             </li>
             <li className="flex items-start gap-3">
@@ -512,14 +903,18 @@ function CompleteStep() {
               </span>
               <div>
                 <div className="font-medium">Start Earning</div>
-                <div className="text-muted-foreground">Receive monthly payments on the 1st</div>
+                <div className="text-muted-foreground">
+                  {isIncomeFocused
+                    ? 'Receive your first payment on the 1st of next month'
+                    : 'Watch your investment compound over time'}
+                </div>
               </div>
             </li>
           </ul>
         </div>
 
         <Button className="w-full" size="lg">
-          Make Your First Investment
+          Go to Your Dashboard
         </Button>
       </CardContent>
     </Card>
@@ -555,6 +950,16 @@ function DocumentIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+    </svg>
+  );
+}
+
+function TargetIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 12h.01" />
     </svg>
   );
 }
